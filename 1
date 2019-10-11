@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import javafx.geometry.*?>
+<?import javafx.collections.*?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<GridPane alignment="center" hgap="10" vgap="10" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="sample.Controller">
+   <children>
+       <HBox prefHeight="466.0" prefWidth="1127.0" spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="1" xmlns:fx="http://javafx.com/fxml">
+           <padding>
+               <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+           </padding>
+          <children>
+      
+              <VBox alignment="TOP_CENTER" maxHeight="692.0" maxWidth="500" prefHeight="692.0" prefWidth="500.0" spacing="10">
+         <children>
+                     <VBox prefHeight="322.0" prefWidth="500.0" spacing="10">
+                        <children>
+                            <FlowPane alignment="CENTER" hgap="10" orientation="HORIZONTAL" rowValignment="BASELINE">
+                               <children>
+                                   <Label text="Select port: " textAlignment="JUSTIFY" />
+                                   <ComboBox fx:id="availablePorts" promptText="select">
+                                       <items>
+                                           <FXCollections fx:factory="observableArrayList" />
+                                       </items>
+                                   </ComboBox>
+                               </children>
+                            </FlowPane>
+                        <FlowPane hgap="10" orientation="HORIZONTAL">
+                           <children>
+                              <Label text="Parameters: " />
+                           </children>
+                        </FlowPane>
+                            <FlowPane hgap="10" orientation="HORIZONTAL">
+                               <children>
+                                   <Label text="Parity: " />
+                                   <ComboBox fx:id="availableParity" promptText="Parity">
+                                       <items>
+                                           <FXCollections fx:factory="observableArrayList" />
+                                       </items>
+                                   </ComboBox>
+                               </children>
+                            </FlowPane>
+                        <FlowPane hgap="10" orientation="HORIZONTAL">
+                           <children>
+                              <Label text="Byte size: " />
+                                   <ComboBox fx:id="availableDataBits" promptText="Byte size">
+                                       <items>
+                                           <FXCollections fx:factory="observableArrayList" />
+                                       </items>
+                                   </ComboBox>
+                           </children>
+                        </FlowPane>
+                        <FlowPane hgap="10" orientation="HORIZONTAL">
+                           <children>
+                              <Label text="Stop bits:" />
+                                   <ComboBox fx:id="availableStopBits" promptText="Stop bit">
+                                       <items>
+                                           <FXCollections fx:factory="observableArrayList" />
+                                       </items>
+                                   </ComboBox>
+                           </children>
+                        </FlowPane>
+                        <FlowPane hgap="10" orientation="HORIZONTAL">
+                           <children>
+                              <Label text="Boud rate:" />
+                                   <ComboBox fx:id="availableBaudRate" promptText="Baud rate">
+                                       <items>
+                                           <FXCollections fx:factory="observableArrayList" />
+                                       </items>
+                                   </ComboBox>
+                           </children>
+                        </FlowPane>
+                            <FlowPane alignment="CENTER" hgap="10" orientation="HORIZONTAL">
+                               <children>
+                                   <ToggleButton fx:id="connectButton" onAction="#connectToPortAction" prefHeight="31.0" prefWidth="151.0" text="Connect" />
+                               </children>
+                            </FlowPane>
+                        </children>
+                     </VBox>
+                     <Separator orientation="HORIZONTAL" />
+                     <TextArea fx:id="debugArea" editable="false" prefHeight="202.0" prefWidth="500.0" promptText="Debug info" wrapText="true" VBox.vgrow="ALWAYS" />
+         </children>
+              </VBox>
+      
+              <Separator orientation="VERTICAL" />
+      
+              <VBox alignment="CENTER" maxHeight="701.0" prefHeight="701.0" prefWidth="581.0" spacing="10" HBox.hgrow="ALWAYS">
+         <children>
+                     <TextArea fx:id="inputArea" promptText="Start typing here..." wrapText="true" VBox.vgrow="ALWAYS" />
+                     <TextArea fx:id="outputArea" editable="false" prefHeight="220.0" prefWidth="581.0" promptText="Received data" wrapText="true" VBox.vgrow="ALWAYS" />
+         </children>
+              </VBox>
+          </children>
+       </HBox>
+   </children>
+   <columnConstraints>
+      <ColumnConstraints />
+      <ColumnConstraints />
+   </columnConstraints>
+   <rowConstraints>
+      <RowConstraints />
+      <RowConstraints />
+   </rowConstraints>
+</GridPane>
