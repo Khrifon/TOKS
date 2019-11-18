@@ -1,0 +1,409 @@
+package toks;
+
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.fxml.FXML;
+import javafx.scene.control.*;
+import javafx.util.StringConverter;
+import jssc.*;
+import jssc.SerialPortEvent;
+import org.apache.commons.lang3.ArrayUtils;
+import toks.parametersEnums.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class Controller {
+
+    @FXML
+    private ComboBox<String> serialPorts;
+    @FXML
+    private ComboBox<BaudRate> baudRate;
+    @FXML
+    private ComboBox<Parity> parity;
+    @FXML
+    private ComboBox<StopBits> stopBits;
+    @FXML
+    private ComboBox<DataBits> dataBits;
+    @FXML
+    private TextArea debugArea;
+    @FXML
+    private TextArea inputArea;
+    @FXML
+    private TextArea outputArea;
+    @FXML
+    private ToggleButton connectButton;
+    @FXML
+    private ComboBox<Integer> sourceBox;
+    @FXML
+    private ComboBox<Integer> destinationBox;
+    @FXML
+    private ObservableList<Integer> setSourceList = FXCollections.observableArrayList();
+    @FXML
+    private ObservableList<Integer> setDestList = FXCollections.observableArrayList();
+    @FXML
+    private CheckBox isError;
+
+    private static Integer sourceInt = -1;
+
+    private static Integer destinationInt = -1;
+
+    private static List<Character> dataBytes = new ArrayList<Character>();
+
+    private PortListener portListener = new PortListener();
+
+    private SerialPort serialPort;
+
+    private ChangeListener<String> listener = (observable, oldValue, newValue) -> {
+        sendData(oldValue, newValue);
+    };
+
+
+    public boolean isOpen() {
+        if (serialPort == null) {
+            return false;
+        }
+        return true;
+    }
+
+
+    ///Implementing new listener
+    private class PortListener implements SerialPortEventListener {
+        @Override
+        public void serialEvent(SerialPortEvent event) {
+            if (event.isERR()) {
+                printDebugInfo("Error with parameters of serial ports");
+                return;
+            }
+            if (event.isRXCHAR() && event.getEventValue() > 0) {
+
+                byte[] packet = BitStuffing.unstuff(read(event.getEventValue()));
+                byte receivedSource = getSourceFromPacket(packet);
+                byte receivedDestination = getDestinationFromPacket(packet);
+                if (receivedDestination != (byte) ((int) sourceInt)) {
+                    debugArea.setText("Received package is not for us." + "\n");
+                } else if (getErrorFromPacket(packet)) {
+                    debugArea.setText("Packet with error from " + receivedSource + "address. Can't read.");
+                } else {
+                    String value = new String(getDataFromPacket(packet));
+                    outputArea.setText(outputArea.getText() + value);
+                    debugArea.setText("Received '" + value + "'" + " from "
+                            + receivedSource + "\n");
+                }
+
+            }
+        }
+    }
+
+    private void sendData(String oldValue, String newValue) {
+        String message;
+        if (newValue.length() > oldValue.length()) {
+            if (inputArea.getCaretPosition() != inputArea.getText().length() - 1) return;
+            message = inputArea.getText();
+            char value = message.charAt(message.length() - 1);
+            if (value < 'А' || value > 'я') {
+                dataBytes.add(value);
+                if (dataBytes.size() == 7) {
+                    byte[] packet = createPacket(destinationInt, sourceInt, dataBytes, isError.isSelected());
+                    write(packet);
+                    printDebugInfo(Converter.binToHex(Converter.bytesToBin(packet)));
+                    dataBytes.clear();
+                }
+            }
+        }
+    }
+
+    public boolean write(byte[] packet) {
+        try {
+            return serialPort.writeBytes(packet);
+        } catch (SerialPortException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private byte[] read(int count) {
+        try {
+            return serialPort.readBytes(count);
+        } catch (SerialPortException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    //Parameters initialization
+    @FXML
+    public void initialize() {
+
+        serialPorts.getItems().addAll(SerialPortList.getPortNames());
+        serialPorts.setConverter(new StringConverter<String>() {
+            @Override
+            public String toString(String object) {
+                return object;
+            }
+
+            @Override
+            public String fromString(String string) {
+                return null;
+            }
+        });
+
+        dataBits.getItems().addAll(DataBits.values());
+        dataBits.setConverter(new StringConverter<DataBits>() {
+            @Override
+            public String toString(DataBits object) {
+                return String.valueOf(object.getValue());
+            }
+
+            @Override
+            public DataBits fromString(String string) {
+                return null;
+            }
+        });
+
+        baudRate.getItems().addAll(BaudRate.values());
+        baudRate.setConverter(new StringConverter<BaudRate>() {
+            @Override
+            public String toString(BaudRate object) {
+                return String.valueOf(object.getValue());
+            }
+
+            @Override
+            public BaudRate fromString(String string) {
+                return null;
+            }
+        });
+
+        stopBits.getItems().addAll(StopBits.values());
+        stopBits.setConverter(new StringConverter<StopBits>() {
+            @Override
+            public String toString(StopBits object) {
+                return object.getName();
+            }
+
+            @Override
+            public StopBits fromString(String string) {
+                return null;
+            }
+        });
+
+        parity.getItems().addAll(Parity.values());
+        parity.setConverter(new StringConverter<Parity>() {
+            @Override
+            public String toString(Parity object) {
+                return object.getName();
+            }
+
+            @Override
+            public Parity fromString(String string) {
+                return null;
+            }
+        });
+        setSourceInt();
+        setDestinationInt();
+        //inputArea.setEditable(true);
+        inputArea.setDisable(true);
+    }
+
+    // Check if all parameters are selected
+    public boolean parametersAreChoosed() {
+        if (parity.getValue() == null || stopBits.getValue() == null ||
+                dataBits.getValue() == null || baudRate.getValue() == null ||
+                serialPorts.getValue() == null) {
+            printDebugInfo("Choose all parameters");
+            return false;
+        }
+
+        //Checks of accordance of data bits and stop bits
+        //first check
+
+        if (stopBits.getValue().equals(StopBits.STOP_BITS_2) &&
+                dataBits.getValue().equals(DataBits.DATA_BITS_5)) {
+            printDebugInfo("If you choose 2 stop bits you can't use 5 data bits");
+            return false;
+        }
+
+        // Second check
+        if (stopBits.getValue().equals(StopBits.STOP_BITS_1_5) &&
+                !dataBits.getValue().equals(DataBits.DATA_BITS_5)) {
+            printDebugInfo("If you choose 1.5 stop bits you can only use 5 data bits");
+            return false;
+        }
+
+        return true;
+    }
+
+
+    //Input of debug message
+    public void printDebugInfo(String message) {
+        String text = debugArea.getText().concat(message).concat("\n");
+        debugArea.setText(text);
+    }
+
+    public void disconnectFromPort() throws SerialPortException {
+        serialPort.removeEventListener();
+        serialPort.closePort();
+    }
+
+    @FXML
+    public void connectToPort() {
+        if (connectButton.getText().equals("Disconnect")) {
+            try {
+                disconnectFromPort();
+                serialPorts.setDisable(false);
+                baudRate.setDisable(false);
+                parity.setDisable(false);
+                stopBits.setDisable(false);
+                dataBits.setDisable(false);
+                connectButton.setSelected(false);
+                outputArea.clear();
+                inputArea.textProperty().removeListener(listener);
+                inputArea.clear();
+                inputArea.setDisable(true);
+                sourceBox.setDisable(false);
+                destinationBox.setDisable(false);
+                connectButton.setText("Connect");
+                printDebugInfo("Disconnected");
+                return;
+            } catch (SerialPortException e) {
+                printDebugInfo("Failed disconnection from port");
+                return;
+            }
+        }
+        if (!parametersAreChoosed()) {
+            printDebugInfo("Parameters wasn't set");
+            connectButton.setSelected(false);
+            return;
+        }
+        try {
+            serialPort = new SerialPort(serialPorts.getValue());
+
+            serialPort.openPort();
+
+            serialPort.setParams(baudRate.getValue().getValue(),
+                    dataBits.getValue().getValue(),
+                    stopBits.getValue().getValue(),
+                    parity.getValue().getValue());
+            printDebugInfo("Parameters have been set");
+
+            serialPort.setFlowControlMode(SerialPort.FLOWCONTROL_RTSCTS_IN |
+                    SerialPort.FLOWCONTROL_RTSCTS_OUT);
+            serialPort.addEventListener(portListener, SerialPort.MASK_RXCHAR);
+
+            //Adding new listener
+            inputArea.textProperty().addListener(listener);
+            connectButton.setText("Disconnect");
+            connectButton.setSelected(false);
+            serialPorts.setDisable(true);
+            baudRate.setDisable(true);
+            parity.setDisable(true);
+            stopBits.setDisable(true);
+            dataBits.setDisable(true);
+            inputArea.setDisable(false);
+            sourceBox.setDisable(true);
+            destinationBox.setDisable(true);
+            printDebugInfo("Connected");
+        } catch (SerialPortException ex) {
+            printDebugInfo("Failed to connect to port");
+            connectButton.setSelected(false);
+        }
+    }
+
+    public byte[] createPacket(int source, int destination, List<Character> dataBytes, boolean error) {
+        String binaryPacket = "00001110";
+        binaryPacket = binaryPacket + Converter.intToBin(source)
+                + Converter.intToBin(destination);
+        StringBuilder sb = new StringBuilder(dataBytes.size());
+        for (char c : dataBytes) {
+            sb.append(c);
+        }
+        String result = sb.toString();
+        char[] charData = result.toCharArray();
+        //char[] charData = ArrayUtils.toPrimitive(dataBytes.toArray(new Character[dataBytes.size()]));
+        binaryPacket = binaryPacket + Converter.bytesToBin(new String(charData).getBytes());
+        if (error) {
+            binaryPacket = binaryPacket + "00000001";
+        } else {
+            binaryPacket = binaryPacket + "00000000";
+        }
+        return Converter.binToBytes(BitStuffing.stuff(binaryPacket));
+    }
+
+    public byte[] getDataFromPacket(byte[] packet) {
+        byte[] result = new byte[7];
+        for (int i = 3; i < 10; i++) {
+            result[i - 3] = packet[i];
+        }
+        return result;
+    }
+
+    public byte getSourceFromPacket(byte[] packet) {
+        return packet[2];
+    }
+
+    public byte getDestinationFromPacket(byte[] packet) {
+        return packet[1];
+    }
+
+    public boolean getErrorFromPacket(byte[] packet) {
+        return packet[10] == 1;
+    }
+
+    @FXML
+    public void setSourceInt() {
+        for (int i = 0; i < 256; i++) {
+            setSourceList.add(i);
+        }
+        sourceBox.setItems(setSourceList);
+        sourceBox.setVisibleRowCount(8);
+        sourceBox.setValue(setSourceList.get(1));
+        sourceInt = setSourceList.get(1);
+        final Integer[] previousValue = {sourceInt};
+        sourceBox.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<Integer>() {
+            @Override
+            public void changed(ObservableValue<? extends Integer> observable, Integer oldValue, Integer newValue) {
+                if (newValue.equals(Integer.parseInt(destinationBox.getValue().toString()))) {
+                    sourceBox.setValue(previousValue[0]);
+                    printDebugInfo("Source address can't be same as destination");
+                } else {
+                    sourceInt = newValue;
+                    previousValue[0] = sourceInt;
+                    printDebugInfo("Source address " + newValue + " is set");
+                }
+            }
+        });
+    }
+
+    @FXML
+    public void setDestinationInt() {
+        for (int i = 0; i < 256; i++) {
+            setDestList.add(i);
+        }
+        destinationBox.setItems(setDestList);
+        destinationBox.setVisibleRowCount(8);
+        destinationBox.setValue(setDestList.get(0));
+        destinationInt = setDestList.get(0);
+        final Integer[] previousValue2 = {destinationInt};
+        destinationBox.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<Integer>() {
+            @Override
+            public void changed(ObservableValue<? extends Integer> observable, Integer oldValue, Integer newValue) {
+                if (newValue.equals(Integer.parseInt(sourceBox.getValue().toString()))) {
+                    destinationBox.setValue(previousValue2[0]);
+                    printDebugInfo("Destination address can't be same as source");
+                } else {
+                    destinationInt = newValue;
+                    previousValue2[0] = destinationInt;
+                    printDebugInfo("Destination address " + newValue + " is set");
+                }
+            }
+        });
+    }
+
+    private void checkSourceAndDestinationAndSetInput() {
+        if (sourceInt != -1 && destinationInt != -1 && isOpen()) {
+            inputArea.setEditable(true);
+        }
+    }
+}
