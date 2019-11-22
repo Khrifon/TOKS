@@ -1,6 +1,7 @@
 package comPorts;
 
 import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.util.StringConverter;
@@ -128,37 +129,47 @@ public class Controller {
         inputArea.setDisable(true);
     }
 
-    private void initInputArea(){
-        inputArea.textProperty().addListener((observable, oldValue, newValue) -> {
-            if (!(newValue.length() < oldValue.length())) {
-                if (inputArea.getCaretPosition() == inputArea.getText().length() - 1) {
-                    char symbol = newValue.charAt(newValue.length() - 1);
-                    if ((symbol >= 'а' && symbol <= 'я') || (symbol >= 'А' && symbol <= 'Я')) {
-                        debugArea.appendText("Incorrect symbol");
-                        return;
-                    }
-                    String message = String.valueOf(symbol);
-                    packageMessage = packageMessage.concat(message);
+    private void initInputArea() {
+        inputArea.textProperty().addListener(new ChangeListener<String>() {
+            @Override
+            public void changed(ObservableValue<? extends String> observable, String oldValue, String newValue) {
+                if (!(newValue.length() < oldValue.length())) {
+                    if (inputArea.getCaretPosition() == inputArea.getText().length() - 1) {
+                        char symbol = newValue.charAt(newValue.length() - 1);
+                        if ((symbol >= 'а' && symbol <= 'я') || (symbol >= 'А' && symbol <= 'Я')) {
+                            debugArea.appendText("Incorrect symbol");
+                            return;
+                        }
+                        String message = String.valueOf(symbol);
+                        packageMessage = packageMessage.concat(message);
 
-                    if (packageMessage.length() == 7) {
-                        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-                        try {
-                            byteArrayOutputStream.write(FLAG);
-                            byteArrayOutputStream.write(Integer.parseInt(destinationField.getText()));
-                            byteArrayOutputStream.write(Integer.parseInt(sourceField.getText()));
-                            byteArrayOutputStream.write(packageMessage.getBytes());
-                            byteArrayOutputStream.write(errorSimulation.isSelected() ? 1 : 0);
-                        } catch (IOException e) {
-                            e.printStackTrace();
+                        if (packageMessage.length() == 7) {
+                            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                            try {
+                                byteArrayOutputStream.write(FLAG);
+                                byteArrayOutputStream.write(Integer.parseInt(destinationField.getText()));
+                                byteArrayOutputStream.write(Integer.parseInt(sourceField.getText()));
+                                byteArrayOutputStream.write(packageMessage.getBytes());
+                                String binaryStr = BitStaffing.bytesToBinary(byteArrayOutputStream.toByteArray());
+                                String crc = CRCUtil.divideCRC(binaryStr + "0000000");
+                                if (errorSimulation.isSelected()) {
+                                    byte[] bytes = CRCUtil.makeError(byteArrayOutputStream.toByteArray());
+                                    byteArrayOutputStream.reset();
+                                    byteArrayOutputStream.write(bytes);
+                                }
+                                byteArrayOutputStream.write(BitStaffing.binaryToBytes(crc + "0"));
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                            byte[] packet = BitStaffing.doBitStaffing(byteArrayOutputStream.toByteArray());
+                            printDebug("Hex packet: 0x" + BitStaffing.bytesToHex(packet));
+                            try {
+                                serialPort.writeBytes(packet);
+                            } catch (SerialPortException e) {
+                                printDebug("Error with sending message");
+                            }
+                            packageMessage = "";
                         }
-                        byte[] packet = BitStaffing.doBitStaffing(byteArrayOutputStream.toByteArray());
-                        printDebug("Hex packet: 0x" + BitStaffing.bytesToHex(packet) );
-                        try {
-                            serialPort.writeBytes(packet);
-                        } catch (SerialPortException e) {
-                           printDebug("Error with sending message");
-                        }
-                        packageMessage = "";
                     }
                 }
             }
@@ -188,16 +199,16 @@ public class Controller {
         try {
             Integer source = Integer.parseInt(sourceField.getText());
             Integer destination = Integer.parseInt(destinationField.getText());
-            if(source < 0 || source > 255 ||
-                    destination < 0 || destination > 255){
+            if (source < 0 || source > 255 ||
+                    destination < 0 || destination > 255) {
                 printDebug("The size of addresses must be 1 byte");
                 return false;
             }
-            if(source.equals(destination)){
+            if (source.equals(destination)) {
                 printDebug("Source address and destination address must be not equals");
                 return false;
             }
-        }catch (NumberFormatException ex){
+        } catch (NumberFormatException ex) {
             printDebug("Addresses not a numbers");
             return false;
         }
@@ -215,7 +226,7 @@ public class Controller {
         //serialPort = null;
     }
 
-    @FXML
+       @FXML
     public void connectToPortAction() {
         if (connectButton.getText().equals("Disconnect")) {
             try {
@@ -234,8 +245,6 @@ public class Controller {
                 inputArea.textProperty().removeListener(listener);
                 inputArea.clear();
                 inputArea.setDisable(true);
-
-
 
 
                 connectButton.setText("Connect");
@@ -287,6 +296,7 @@ public class Controller {
         }
     }
 
+
     private class PortReader implements SerialPortEventListener {
         @Override
         public void serialEvent(SerialPortEvent event) {
@@ -299,12 +309,21 @@ public class Controller {
                     byte[] message;
                     message = serialPort.readBytes(event.getEventValue());
                     message = BitStaffing.doDeBitStaffing(message);
-                    if(message[0] == FLAG && message[1] == Integer.parseInt(sourceField.getText()) &&
-                            message[10] == 0) {
+                    String str1 = BitStaffing.bytesToBinary(message).substring(0, 87);
+
+                    if (!CRCUtil.divideCRC(str1).equals("0000000")) {
+                        String result =  CRCUtil.fixSingleError(BitStaffing.bytesToBinary(message));
+                        if(result == null){
+                            printDebug("Income packet have more than 1 error");
+                            return;
+                        }
+                        message = BitStaffing.binaryToBytes(result);
+                    }
+                    if (message[0] == FLAG && message[1] == Integer.parseInt(sourceField.getText())) {
                         String str = new String(message);
-                        outputArea.appendText(str.substring(3,10));
-                    }else if(message[10] == 1 ) {
-                        printDebug("Income packet has some errors");
+                        outputArea.appendText(str.substring(3, 10));
+                    } else {
+                        printDebug("Errors");
                     }
                 } catch (SerialPortException e) {
                     e.printStackTrace();
